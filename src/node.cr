@@ -58,7 +58,7 @@ struct Node
       child = Node.new(key, "#{full_name}.#{key}")
       new_values = values.map { |value| value.split('.')[1..].join('.') }.reject! { |value| value.empty? }
 
-      if new_values.size == 1
+      if new_values.size == 1 && !new_values.first.includes?('.')
         child.add_child(Node.new(new_values.first, "#{full_name}.#{values.first}"))
       else
         child.children_from_scanned_results(new_values.to_set)

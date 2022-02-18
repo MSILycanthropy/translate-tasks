@@ -17,7 +17,7 @@ class Scanner
     end
   end
 
-  def scan
+  def scan : Set(String)
     matches = Set(String).new
 
     files.each do |file|
@@ -25,7 +25,7 @@ class Scanner
       matches.concat(content.scan(CALL_RE).map { |match| strip_key(match) })
     end
 
-    matches.select { |match| !match.includes?("\#{") }.to_set
+    matches.to_set
   end
 
   private def full_glob_pattern

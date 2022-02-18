@@ -3,3 +3,5 @@
 /bin/
 /.shards/
 *.dwarf
+translate-tasks
+translate-tasks.yml
