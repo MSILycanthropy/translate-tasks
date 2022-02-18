@@ -25,7 +25,7 @@ class Scanner
       matches.concat(content.scan(CALL_RE).map { |match| strip_key(match) })
     end
 
-    matches.to_set
+    matches.reject { |key| key.includes?("\#{") }.to_set
   end
 
   private def full_glob_pattern

@@ -28,17 +28,15 @@ module ParserHelper
                         end
       scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
-      @config.locales(key).as(Array).each do |locale|
+      @config.locales(key).each do |locale|
         yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
         yaml_tree = Tree.from_yaml(yaml)
+        scanned_tree = Tree.from_scanned_results(scanned, locale)
 
-        scanned_tree = Tree.from_scanned_results(scanned, locale.as(String))
-        missing_keys = scanned_tree.missing(yaml_tree).map { |missing| missing.full_name.gsub("#{locale}.", "") }
-        ignored = ignored_keys(@config.write(key).ignore_missing, missing_keys)
-        missing_keys_hash[locale] = (missing_keys - ignored).reject! { |key| key.includes?("\#{") }
+        missing_keys_hash[locale] = scanned_tree.missing_keys(yaml_tree, locale, @config.write(key).ignore_missing || [] of String)
       end
 
-      render_table(missing_keys_hash, "Missing Keys", @config.locales(key).as(Array))
+      render_table(missing_keys_hash, "Missing Keys", @config.locales(key))
     end
   end
 
@@ -56,17 +54,13 @@ module ParserHelper
                           "#{Dir.current}/#{@config.write(key).directory}"
                         end
       scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
-      scanned = scanned.reject { |key| key.includes?("\#{") }.to_set
 
       @config.locales(key).as(Array).each do |locale|
         yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
         yaml_tree = Tree.from_yaml(yaml)
         scanned_tree = Tree.from_scanned_results(scanned, locale.as(String))
-        unused_keys = scanned_tree.unused(yaml_tree).map { |unused| unused.full_name.gsub("#{locale}.", "") }
 
-        ignored = ignored_keys(@config.write(key).ignore_unused, unused_keys)
-
-        unused_keys_hash[locale] = (unused_keys - ignored).reject! { |key| key.includes?("\#{") }
+        unused_keys_hash[locale] = scanned_tree.unused_keys(yaml_tree, locale, @config.write(key).ignore_unused || [] of String)
       end
 
      render_table(unused_keys_hash, "Unused Keys", @config.locales(key).as(Array))
@@ -77,20 +71,26 @@ module ParserHelper
     table = TerminalTable.new
     table.headings = ["Locale", "Key"]
 
-    if keys_hash.keys == locales
-      all = "all".colorize(:blue).to_s
-      keys_hash[locales.first].each do |key|
-        table << [all, key.colorize(:green).to_s]
+    # ALL
+    keys_in_all = [] of String
+    keys_hash[keys_hash.keys.first].each do |key|
+      if keys_hash.values.all? { |value| value.includes?(key)}
+        keys_in_all << key
+        table << ["all".colorize(:blue).to_s, key.colorize(:green).to_s]
       end
-    else
-      keys_hash.each do |locale, keys|
-        keys.each do |key|
+    end
+
+    # ONLY IN SOME
+    keys_hash.each do |locale, keys|
+      new_keys = keys - keys_in_all
+      unless new_keys.empty?
+        new_keys.each do |key|
           table << [locale.colorize(:blue).to_s, key.colorize(:green).to_s]
         end
       end
     end
 
-
+    puts keys_in_all
 
     if table.rows.size > 0
       puts title
@@ -98,27 +98,6 @@ module ParserHelper
     else
       puts "Congrats! No #{title.downcase} found".colorize(:green)
     end
-  end
-
-  private def ignored_keys(ignored : Array(String) | Nil, array : Array(String)) : Array(String)
-    return [] of String if ignored.nil?
-
-    filter = [] of String
-
-    ignored.each do |key|
-      if key.includes?("*")
-        filter.concat(array.select { |array_key| array_key.starts_with?(key.gsub("*", "")) })
-      elsif key.includes?("{")
-        parts_to_insert = key.scan(/{.+}/).first[0].strip("{}").split(",")
-        parts_to_insert.each do |part|
-          filter << key.gsub(/{.+}/, part)
-        end
-      elsif array.includes?(key)
-        filter << key
-      end
-    end
-
-    filter
   end
 
   private def default_yaml

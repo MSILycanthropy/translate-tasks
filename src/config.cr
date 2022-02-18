@@ -7,24 +7,24 @@ struct Config
 
   @path : String
   @keys : Array(String)
-  @settings : Hash(String, Hash(String, Array(String) | Bool | Hash(String, Array(String) | Bool | String) | String))
+  @settings : Hash(YAML::Any, YAML::Any)
   def initialize(path)
     @path = path
     if !File.exists?(@path)
       @keys = [] of String
-      @settings = {} of String => Hash(String, Array(String) | Bool | Hash(String, Array(String) | Bool | String) | String)
+      @settings = {} of YAML::Any => YAML::Any
       return
     end
 
     yaml = YAML.parse(File.read(@path))
     @keys = yaml["settings_keys"].as_a.map { |k| k.to_s }
+    @settings = yaml.as_h.select! { |k, _| k != "settings_keys" }
 
-    @settings = @keys.zip(key_hashes(yaml)).to_h
     deny_invalid_keys!
   end
 
   def get(key, setting_key)
-    @settings[key][setting_key]
+    @settings[key].as_h[setting_key]
   end
 
   def base_locale(key)
@@ -32,22 +32,22 @@ struct Config
   end
 
   def locales(key)
-    get(key, "locales")
+    get(key, "locales").as_a.map { |locale| locale.as_s }
   end
 
   def read(key)
-    ReadSettings.new(get(key, "read").as(Hash))
+    ReadSettings.new(get(key, "read").as_h)
   end
 
   def write(key)
-    WriteSettings.new(get(key, "write").as(Hash))
+    WriteSettings.new(get(key, "write").as_h)
   end
 
   private def deny_invalid_keys!
     @keys.each do |key|
-      base = @settings[key]
-      write = get(key, "write").as(Hash)
-      read = get(key, "read").as(Hash)
+      base = @settings[key].as_h
+      write = get(key, "write").as_h
+      read = get(key, "read").as_h
 
       unless (base.keys - ALL_BASE_SETTINGS).empty?
         raise "Invalid base settings for #{key}: #{base.keys - ALL_BASE_SETTINGS}"
@@ -60,37 +60,6 @@ struct Config
       unless (read.keys - ALL_READ_SETTINGS).empty?
         raise "Invalid read settings for #{key}: #{read.keys - ALL_READ_SETTINGS}"
       end
-    end
-  end
-
-  private def key_hashes(yaml)
-    @keys.map do |key|
-      hash = {} of String => Bool | String | Array(String) | Hash(String, String | Array(String) | Bool)
-      yaml[key].as_h.each do |k, v|
-        k = k.as_s
-        if v.as_s?
-          hash[k] = v.as_s
-        elsif v.as_bool?
-          hash[k] = v.as_bool
-        elsif v.as_a?
-          hash[k] = v.as_a.map { |v| v.as_s }
-        elsif v.as_h?
-          inner_hash = {} of String => String | Array(String) | Bool
-          v.as_h.each do |_k, _v|
-            _k = _k.as_s
-            if _v.as_s?
-              inner_hash[_k] = _v.as_s
-            elsif _v.as_a?
-              inner_hash[_k] = _v.as_a.map { |v| v.as_s }
-            elsif _v.as_bool?
-              inner_hash[_k] = _v.as_bool
-            end
-          end
-          hash[k] = inner_hash
-        end
-      end
-
-      hash
     end
   end
 end

@@ -16,6 +16,39 @@ struct Tree
     @root.missing(other.root)
   end
 
+  def missing_keys(other : Tree, locale : String, ignored : Array(String)) : Array(String)
+    missing_keys = missing(other).map { |missing| missing.full_name.gsub("#{locale}.", "") }
+
+    (missing_keys - ignored_keys(ignored, missing_keys)).reject! { |key| key.includes?("\#{") }
+  end
+
+  def unused_keys(other : Tree, locale : String, ignored : Array(String)) : Array(String)
+    unused_keys = unused(other).map { |missing| missing.full_name.gsub("#{locale}.", "") }
+
+    (unused_keys - ignored_keys(ignored, unused_keys)).reject! { |key| key.includes?("\#{") }
+  end
+
+  private def ignored_keys(ignored : Array(String) | Nil, array : Array(String)) : Array(String)
+    return [] of String if ignored.nil?
+
+    filter = [] of String
+
+    ignored.each do |key|
+      if key.includes?("*")
+        filter.concat(array.select { |array_key| array_key.starts_with?(key.gsub("*", "")) })
+      elsif key.includes?("{")
+        parts_to_insert = key.scan(/{.+}/).first[0].strip("{}").split(",")
+        parts_to_insert.each do |part|
+          filter << key.gsub(/{.+}/, part)
+        end
+      elsif array.includes?(key)
+        filter << key
+      end
+    end
+
+    filter
+  end
+
   def unused(other : Tree)
     other.root.missing(@root)
   end
