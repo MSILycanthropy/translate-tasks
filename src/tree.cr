@@ -65,6 +65,10 @@ struct Tree
     @root.add_child_by_key(key)
   end
 
+  def remove_child_by_key(key : String)
+    @root.remove_child_by_key(key)
+  end
+
   def self.from_yaml(yaml : YAML::Any)
     root = Node.new(yaml.as_h.keys[0].as_s, yaml.as_h.keys[0].as_s)
     root.children_from_yaml(yaml.as_h.values[0])

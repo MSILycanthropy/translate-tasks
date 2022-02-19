@@ -15,20 +15,10 @@ module ParserHelper
 
   def missing_translations(key)
     missing_keys_hash = {} of String => Array(String)
-    read_directory = if @config.read(key).directory == "root"
-                        Dir.current
-                      else
-                        "#{Dir.current}/#{@config.read(key).directory}"
-                      end
-    write_directory = if @config.write(key).directory == "root"
-                        Dir.current
-                      else
-                        "#{Dir.current}/#{@config.write(key).directory}"
-                      end
-    scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
+    scanned = Scanner.new(@read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
     @locales.each do |locale|
-      yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+      yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
       yaml = nil unless yaml.as_h?
 
       if yaml.nil?
@@ -46,20 +36,20 @@ module ParserHelper
 
   def unused_translations(key)
     unused_keys_hash = {} of String => Array(String)
-    read_directory = if @config.read(key).directory == "root"
+    @read_directory = if @config.read(key).directory == "root"
                         Dir.current
                       else
                         "#{Dir.current}/#{@config.read(key).directory}"
                       end
-    write_directory = if @config.write(key).directory == "root"
+    @write_directory = if @config.write(key).directory == "root"
                         Dir.current
                       else
                         "#{Dir.current}/#{@config.write(key).directory}"
                       end
-    scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
+    scanned = Scanner.new(@read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
     @locales.each do |locale|
-      yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+      yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
       yaml = nil unless yaml.as_h?
 
       if yaml.nil?
@@ -76,20 +66,10 @@ module ParserHelper
   end
 
   def add_missing_translations(key, missing_translations)
-    read_directory = if @config.read(key).directory == "root"
-                        Dir.current
-                      else
-                      "#{Dir.current}/#{@config.read(key).directory}"
-                      end
-    write_directory = if @config.write(key).directory == "root"
-                        Dir.current
-                      else
-                        "#{Dir.current}/#{@config.write(key).directory}"
-                      end
-    scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
+    scanned = Scanner.new(@read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
     @locales.each do |locale|
-      yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+      yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
       yaml = nil unless yaml.as_h?
 
       yaml_tree = if yaml.nil?
@@ -105,31 +85,46 @@ module ParserHelper
         yaml_tree.add_child_by_key(key)
       end
 
-      YAML.dump(yaml_tree.to_h, File.open("#{write_directory}/#{locale}.yml", "w"))
+      YAML.dump(yaml_tree.to_h, File.open("#{@write_directory}/#{locale}.yml", "w"))
     end
   end
 
-  def normalize_translations
-    @config.keys.each do |key|
-      read_directory = if @config.read(key).directory == "root"
-                         Dir.current
-                       else
-                        "#{Dir.current}/#{@config.read(key).directory}"
-                       end
-      write_directory = if @config.write(key).directory == "root"
-                          Dir.current
-                        else
-                          "#{Dir.current}/#{@config.write(key).directory}"
-                        end
+  def remove_unused_translations(key, unused_translations)
+    scanned = Scanner.new(@read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
-      @config.locales(key).each do |locale|
-        dir_name = "#{write_directory}/#{locale}.yml"
-        yaml = YAML.parse(File.read(dir_name))
-        yaml_tree = Tree.from_yaml(yaml)
-        normalized_yaml = yaml_tree.to_h
+    @locales.each do |locale|
+      yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
+      yaml = nil unless yaml.as_h?
 
-        YAML.dump(normalized_yaml, File.open(dir_name, "w"))
+      yaml_tree = if yaml.nil?
+                    Tree.new(Node.new(locale, locale))
+                  else
+                    Tree.from_yaml(yaml)
+                  end
+
+      scanned_tree = Tree.from_scanned_results(scanned, locale)
+      unused_keys = scanned_tree.unused_keys(yaml_tree, locale, @config.write(key).ignore_unused || [] of String)
+
+      unused_keys.each do |key|
+        yaml_tree.remove_child_by_key(key)
       end
+
+      if yaml_tree.root.children.empty?
+        YAML.dump(nil, File.open("#{@write_directory}/#{locale}.yml", "w"))
+      else
+        YAML.dump(yaml_tree.to_h, File.open("#{@write_directory}/#{locale}.yml", "w"))
+      end
+    end
+  end
+
+  def normalize_translations(key)
+    @locales.each do |locale|
+      dir_name = "#{@write_directory}/#{locale}.yml"
+      yaml = YAML.parse(File.read(dir_name))
+      yaml_tree = Tree.from_yaml(yaml)
+      normalized_yaml = yaml_tree.to_h
+
+      YAML.dump(normalized_yaml, File.open(dir_name, "w"))
     end
   end
 
@@ -214,8 +209,8 @@ module ParserHelper
     #     single_file: true
     #     file_name: locales
     #     directory: example/directory/write
-    # ignore_missing:
-    # ignore_unused:
+    #     ignore_missing:
+    #     ignore_unused:
     END
   end
 end

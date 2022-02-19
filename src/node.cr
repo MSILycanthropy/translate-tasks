@@ -8,6 +8,19 @@ struct Node
     @value = value
   end
 
+  def ==(other : Node)
+    return false unless @children.size == other.children.size
+    equal = true
+    equal &&= @name == other.name
+    equal &&= @full_name == other.full_name
+    @children.each do |child|
+      other_child = other.find_child(child.full_name)
+      equal &&= child == other_child
+    end
+
+    equal
+  end
+
   def add_child(child : Node)
     @children << child
   end
@@ -115,6 +128,21 @@ struct Node
         end
 
         current_node.add_child(nodes.first)
+      end
+    end
+  end
+
+  def remove_child_by_key(key : String)
+    name = "#{full_name}.#{key}"
+    child = find_child(name)
+
+    if child
+      parent_name = child.full_name.split('.')[0..-2].join('.')
+      parent = find_child(parent_name)
+      parent.children.delete(child) if parent
+
+      if parent && parent.value.as_s == "" && parent.children.empty?
+        remove_child_by_key(parent_name.split('.')[1..].join('.'))
       end
     end
   end

@@ -10,7 +10,7 @@ struct Config
   @settings : Hash(YAML::Any, YAML::Any)
   def initialize(path)
     @path = path
-    if !File.exists?(@path)
+    unless File.exists?(@path)
       @keys = [] of String
       @settings = {} of YAML::Any => YAML::Any
       return
@@ -41,6 +41,10 @@ struct Config
 
   def write(key)
     WriteSettings.new(get(key, "write").as_h)
+  end
+
+  def exists?
+    File.exists?(@path)
   end
 
   private def deny_invalid_keys!

@@ -14,6 +14,8 @@ module ActionParser
     @locales : Array(String) = [] of String
     @command : Symbol = :help
     @gif : Bool = false
+    @read_directory : String = ""
+    @write_directory : String = ""
 
     def initialize
       setup_flags
@@ -30,22 +32,25 @@ module ActionParser
       when :initialize
         initialize_config
       when :missing
+        deny_no_config!
         @config.keys.each do |key|
-          @locales = @config.locales(key) if @locales.empty?
+          set_context(key)
           missing_translations = missing_translations(key)
 
           render_table(missing_translations, "Missing Translations", @config.locales(key))
         end
       when :unused
+        deny_no_config!
         @config.keys.each do |key|
-          @locales = @config.locales(key) if @locales.empty?
+          set_context(key)
           unused_translations = unused_translations(key)
 
           render_table(unused_translations, "Unused Translations", @config.locales(key))
         end
       when :add_missing
+        deny_no_config!
         @config.keys.each do |key|
-          @locales = @config.locales(key) if @locales.empty?
+          set_context(key)
           missing_translations = missing_translations(key)
 
           render_table(missing_translations, "Missing Translations", @config.locales(key))
@@ -65,8 +70,34 @@ module ActionParser
             end
           end
         end
+      when :remove_unused
+        deny_no_config!
+        @config.keys.each do |key|
+          set_context(key)
+          unused_translations = unused_translations(key)
+
+          render_table(unused_translations, "Unused Translations", @config.locales(key))
+
+          unless unused_translations.all? { |_, v| v.empty? }
+            print "Would you like to remove the above keys (y/n)? "
+            should_remove = gets
+            if should_remove
+              if should_remove.chomp == "y"
+                remove_unused_translations(key, unused_translations)
+                gracefully_exit(:success)
+              else
+                gracefully_exit(:failure)
+              end
+            else
+              exit
+            end
+          end
+        end
       when :normalize
-        normalize_translations
+        deny_no_config!
+        @config.keys.each do |key|
+          normalize_translations(key)
+        end
         gracefully_exit(:success)
       when :gif
         @gif_printer.print([:success, :failure].shuffle.first)
@@ -76,7 +107,6 @@ module ActionParser
     private def setup_commands
       @parser.on("init", "Initialize a new project") do
         @command = :initialize
-        exit
       end
       @parser.on("missing", "Show missing translations") do
         @command = :missing
@@ -88,7 +118,7 @@ module ActionParser
         @command = :unused
       end
       @parser.on("remove-unused", "Remove unused translations") do
-        puts "Not implemented yet"
+        @command = :remove_unused
       end
       @parser.on("normalize", "Normalize translations") do
         @command = :normalize
@@ -111,6 +141,27 @@ module ActionParser
 
       @gif_printer.print(type) if send_gif
       exit
+    end
+
+    private def set_context(key)
+      @read_directory = if @config.read(key).directory == "root"
+                          Dir.current
+                        else
+                          "#{Dir.current}/#{@config.read(key).directory}"
+                        end
+      @write_directory = if @config.write(key).directory == "root"
+                           Dir.current
+                         else
+                           "#{Dir.current}/#{@config.write(key).directory}"
+                         end
+      @locales = @config.locales(key) if @locales.empty?
+    end
+
+    private def deny_no_config!
+      unless @config.exists?
+        puts "Config file not found. Please create one with translate-tasks init"
+        exit
+      end
     end
 
     private def setup_flags
