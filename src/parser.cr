@@ -10,39 +10,107 @@ module ActionParser
     include ParserHelper
     @parser : OptionParser = OptionParser.new
     @config : Config = Config.new("#{Dir.current}/translate-tasks.yml")
+    @gif_printer = GifPrinter.new
+    @locales : Array(String) = [] of String
+    @command : Symbol = :help
+    @gif : Bool = false
 
-    def perform
-      @parser.banner = "idk what to put here yet"
+    def initialize
       setup_flags
       setup_commands
       catch_error
+    end
 
+    def perform
+      @parser.banner = "idk what to put here yet"
       @parser.parse
+
+      # TODO: Abstract this into a lookup of functions
+      case @command
+      when :initialize
+        initialize_config
+      when :missing
+        @config.keys.each do |key|
+          @locales = @config.locales(key) if @locales.empty?
+          missing_translations = missing_translations(key)
+
+          render_table(missing_translations, "Missing Translations", @config.locales(key))
+        end
+      when :unused
+        @config.keys.each do |key|
+          @locales = @config.locales(key) if @locales.empty?
+          unused_translations = unused_translations(key)
+
+          render_table(unused_translations, "Unused Translations", @config.locales(key))
+        end
+      when :add_missing
+        @config.keys.each do |key|
+          @locales = @config.locales(key) if @locales.empty?
+          missing_translations = missing_translations(key)
+
+          render_table(missing_translations, "Missing Translations", @config.locales(key))
+
+          unless missing_translations.all? { |_, v| v.empty? }
+            print "Would you like to add the above keys (y/n)? "
+            should_add = gets
+            if should_add
+              if should_add.chomp == "y"
+                add_missing_translations(key, missing_translations)
+                gracefully_exit(:success)
+              else
+                gracefully_exit(:failure)
+              end
+            else
+              exit
+            end
+          end
+        end
+      when :normalize
+        normalize_translations
+        gracefully_exit(:success)
+      when :gif
+        @gif_printer.print([:success, :failure].shuffle.first)
+      end
     end
 
     private def setup_commands
       @parser.on("init", "Initialize a new project") do
-        initialize_config
+        @command = :initialize
         exit
       end
       @parser.on("missing", "Show missing translations") do
-        show_missing_translations
-        exit
+        @command = :missing
       end
-      @parser.on("add missing", "Add missing translations") do
-        #add_missing_translations
-        puts "Not implemented yet"
-        exit
+      @parser.on("add-missing", "Add missing translations") do
+        @command = :add_missing
       end
       @parser.on("unused", "Show unused translations") do
-        show_unused_translations
-        exit
+        @command = :unused
       end
-      @parser.on("add unused", "Add unused translations") do
-        #add_unused_translations
+      @parser.on("remove-unused", "Remove unused translations") do
         puts "Not implemented yet"
-        exit
       end
+      @parser.on("normalize", "Normalize translations") do
+        @command = :normalize
+      end
+      @parser.on("gif", "Render a random gif") do
+        @command = :gif
+      end
+    end
+
+    def gracefully_exit(type : Symbol)
+      send_gif = @gif || rand(100) == 1
+
+      if type == :success
+        puts "All done!"
+        puts "Here's a gif because... why not?" if send_gif
+      elsif
+        puts "Well, that didn't quite work... "
+        puts "Bye!"
+      end
+
+      @gif_printer.print(type) if send_gif
+      exit
     end
 
     private def setup_flags
@@ -50,6 +118,12 @@ module ActionParser
       @parser.on "-h", "--help", "Show help" do
         puts @parser
         exit
+      end
+      @parser.on("-l LOCALE", "--locale=LOCALE", "Locale to check") do |locale|
+        @locales << locale
+      end
+      @parser.on("-g", "--gif", "Show the cool random gifs every time") do
+        @gif = true
       end
     end
 

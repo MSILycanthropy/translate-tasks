@@ -1,5 +1,6 @@
 require "./helpers/scanner_helper"
 
+# TODO: Implement some AST fallback stuff for string interps
 class Scanner
   include ScannerHelper
 

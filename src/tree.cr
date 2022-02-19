@@ -9,7 +9,7 @@ struct Tree
   end
 
   def find_child(name_chain : String)
-    @root.find_child(name_chain)
+    @root.find_child!(name_chain)
   end
 
   def missing(other : Tree)
@@ -53,9 +53,22 @@ struct Tree
     other.root.missing(@root)
   end
 
+  def to_hash : Hash(YAML::Any, YAML::Any)
+    { YAML::Any.new(@root.name) => YAML::Any.new(@root.to_h) }
+  end
+
+  def to_h : Hash(YAML::Any, YAML::Any)
+    to_hash
+  end
+
+  def add_child_by_key(key : String)
+    @root.add_child_by_key(key)
+  end
+
   def self.from_yaml(yaml : YAML::Any)
     root = Node.new(yaml.as_h.keys[0].as_s, yaml.as_h.keys[0].as_s)
     root.children_from_yaml(yaml.as_h.values[0])
+
     Tree.new(root)
   end
 

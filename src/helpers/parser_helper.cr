@@ -13,70 +13,138 @@ module ParserHelper
     end
   end
 
-  def show_missing_translations
-    @config.keys.each do |key|
-      missing_keys_hash = {} of String => Array(String)
-      read_directory = if @config.read(key).directory == "root"
-                         Dir.current
-                       else
-                         "#{Dir.current}/#{@config.read(key).directory}"
-                       end
-      write_directory = if @config.write(key).directory == "root"
-                          Dir.current
-                        else
-                          "#{Dir.current}/#{@config.write(key).directory}"
-                        end
-      scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
+  def missing_translations(key)
+    missing_keys_hash = {} of String => Array(String)
+    read_directory = if @config.read(key).directory == "root"
+                        Dir.current
+                      else
+                        "#{Dir.current}/#{@config.read(key).directory}"
+                      end
+    write_directory = if @config.write(key).directory == "root"
+                        Dir.current
+                      else
+                        "#{Dir.current}/#{@config.write(key).directory}"
+                      end
+    scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
-      @config.locales(key).each do |locale|
-        yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+    @locales.each do |locale|
+      yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+      yaml = nil unless yaml.as_h?
+
+      if yaml.nil?
+        missing_keys_hash[locale] = scanned.to_a
+      else
         yaml_tree = Tree.from_yaml(yaml)
         scanned_tree = Tree.from_scanned_results(scanned, locale)
 
         missing_keys_hash[locale] = scanned_tree.missing_keys(yaml_tree, locale, @config.write(key).ignore_missing || [] of String)
       end
+    end
 
-      render_table(missing_keys_hash, "Missing Keys", @config.locales(key))
+    missing_keys_hash
+  end
+
+  def unused_translations(key)
+    unused_keys_hash = {} of String => Array(String)
+    read_directory = if @config.read(key).directory == "root"
+                        Dir.current
+                      else
+                        "#{Dir.current}/#{@config.read(key).directory}"
+                      end
+    write_directory = if @config.write(key).directory == "root"
+                        Dir.current
+                      else
+                        "#{Dir.current}/#{@config.write(key).directory}"
+                      end
+    scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
+
+    @locales.each do |locale|
+      yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+      yaml = nil unless yaml.as_h?
+
+      if yaml.nil?
+        unused_keys_hash[locale] = scanned.to_a
+      else
+        yaml_tree = Tree.from_yaml(yaml)
+        scanned_tree = Tree.from_scanned_results(scanned, locale.as(String))
+
+        unused_keys_hash[locale] = scanned_tree.unused_keys(yaml_tree, locale, @config.write(key).ignore_unused || [] of String)
+      end
+    end
+
+    unused_keys_hash
+  end
+
+  def add_missing_translations(key, missing_translations)
+    read_directory = if @config.read(key).directory == "root"
+                        Dir.current
+                      else
+                      "#{Dir.current}/#{@config.read(key).directory}"
+                      end
+    write_directory = if @config.write(key).directory == "root"
+                        Dir.current
+                      else
+                        "#{Dir.current}/#{@config.write(key).directory}"
+                      end
+    scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
+
+    @locales.each do |locale|
+      yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+      yaml = nil unless yaml.as_h?
+
+      yaml_tree = if yaml.nil?
+                    Tree.new(Node.new(locale, locale))
+                  else
+                    Tree.from_yaml(yaml)
+                  end
+
+      scanned_tree = Tree.from_scanned_results(scanned, locale)
+      missing_keys = scanned_tree.missing_keys(yaml_tree, locale, @config.write(key).ignore_missing || [] of String)
+
+      missing_keys.each do |key|
+        yaml_tree.add_child_by_key(key)
+      end
+
+      YAML.dump(yaml_tree.to_h, File.open("#{write_directory}/#{locale}.yml", "w"))
     end
   end
 
-  def show_unused_translations
+  def normalize_translations
     @config.keys.each do |key|
-      unused_keys_hash = {} of String => Array(String)
       read_directory = if @config.read(key).directory == "root"
                          Dir.current
                        else
-                         "#{Dir.current}/#{@config.read(key).directory}"
+                        "#{Dir.current}/#{@config.read(key).directory}"
                        end
       write_directory = if @config.write(key).directory == "root"
                           Dir.current
                         else
                           "#{Dir.current}/#{@config.write(key).directory}"
                         end
-      scanned = Scanner.new(read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
-      @config.locales(key).as(Array).each do |locale|
-        yaml = YAML.parse(File.read("#{write_directory}/#{locale}.yml"))
+      @config.locales(key).each do |locale|
+        dir_name = "#{write_directory}/#{locale}.yml"
+        yaml = YAML.parse(File.read(dir_name))
         yaml_tree = Tree.from_yaml(yaml)
-        scanned_tree = Tree.from_scanned_results(scanned, locale.as(String))
+        normalized_yaml = yaml_tree.to_h
 
-        unused_keys_hash[locale] = scanned_tree.unused_keys(yaml_tree, locale, @config.write(key).ignore_unused || [] of String)
+        YAML.dump(normalized_yaml, File.open(dir_name, "w"))
       end
-
-     render_table(unused_keys_hash, "Unused Keys", @config.locales(key).as(Array))
     end
   end
 
-  private def render_table(keys_hash : Hash(String, Array(String)), title : String, locales : Array(String))
+  private def render_table(keys_hash : Hash(String, Array(String)), title : String, config_locales : Array(String))
     table = TerminalTable.new
     table.headings = ["Locale", "Key"]
 
     # ALL
     keys_in_all = [] of String
-    keys_hash[keys_hash.keys.first].each do |key|
-      if keys_hash.values.all? { |value| value.includes?(key)}
-        keys_in_all << key
-        table << ["all".colorize(:blue).to_s, key.colorize(:green).to_s]
+    if @locales == config_locales
+      keys_hash[keys_hash.keys.first].each do |key|
+        if keys_hash.values.all? { |value| value.includes?(key)}
+          keys_in_all << key
+          table << ["all".colorize(:blue).to_s, key.colorize(:green).to_s]
+        end
       end
     end
 
@@ -89,8 +157,6 @@ module ParserHelper
         end
       end
     end
-
-    puts keys_in_all
 
     if table.rows.size > 0
       puts title

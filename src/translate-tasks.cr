@@ -13,5 +13,7 @@ require "./config"
 require "./settings"
 require "./scanner"
 require "./result"
+require "./gif_printer"
+require "process"
 
 ActionParser.parse
