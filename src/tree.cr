@@ -65,6 +65,10 @@ struct Tree
     @root.add_child_by_key(key)
   end
 
+  def add_child_by_key(key : String, value : String)
+    @root.add_child_by_key(key, value)
+  end
+
   def remove_child_by_key(key : String)
     @root.remove_child_by_key(key)
   end

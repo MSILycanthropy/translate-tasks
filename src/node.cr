@@ -67,6 +67,7 @@ struct Node
     add_children(_children)
   end
 
+  # TODO: can this just use the child_from_key?
   def children_from_scanned_results(results : Set(String))
     results.group_by { |result| result.split('.').first }.each do |key, values|
       child = Node.new(key, "#{full_name}.#{key}")
@@ -85,7 +86,7 @@ struct Node
   def to_hash : Hash(YAML::Any, YAML::Any)
     hash = {} of YAML::Any => YAML::Any
     @children.each do |child|
-      if child.value.as_s? != "" || child.value.as_a?
+      if (child.value.as_s? != "" || child.value.as_a?) && child.children.empty?
         hash[YAML::Any.new(child.name)] = child.value
       else
         hash[YAML::Any.new(child.name)] = YAML::Any.new(child.to_hash)
@@ -104,7 +105,7 @@ struct Node
     to_hash
   end
 
-  def add_child_by_key(key : String)
+  def add_child_by_key(key : String, value : String)
     node_names = key.split('.')
     current_node = self
 
@@ -115,6 +116,34 @@ struct Node
         remaining_names = node_names[index..]
         nodes = remaining_names.map do |name|
           if name == remaining_names.last
+            Node.new(name, "#{current_node.full_name}.#{name}", value: YAML::Any.new(value))
+          else
+            Node.new(name, "#{current_node.full_name}.#{name}")
+          end
+        end
+
+        nodes.reduce do |node, next_node|
+          node.add_child(next_node)
+          next_node
+        end
+
+        current_node.add_child(nodes.first)
+      end
+    end
+  end
+
+  def add_child_by_key(key : String)
+    node_names = key.split('.')
+    current_node = self
+
+    node_names.each_with_index do |node_name, index|
+      if current_node.find_first_child?(node_name)
+        current_node = current_node.find_first_child!(node_name)
+      else
+        remaining_names = node_names[index..]
+
+        nodes = remaining_names.map do |name|
+          if name == remaining_names.last
             Node.new(name, "#{current_node.full_name}.#{name}",
                      value: YAML::Any.new(remaining_names.last.gsub("_", " ").capitalize))
           else
@@ -122,6 +151,7 @@ struct Node
           end
         end
 
+        # put all the nodes in the first one
         nodes.reduce do |node, next_node|
           node.add_child(next_node)
           next_node
@@ -185,7 +215,7 @@ struct Node
     nodes
   end
 
-  def find_first_child? (name : String)
+  def find_first_child?(name : String)
     find_first_child(name) != nil
   end
 
@@ -194,15 +224,6 @@ struct Node
   end
 
   def find_first_child(name : String)
-    if @name == name
-      return self
-    end
-
-    if @children
-      @children.each do |child|
-        result = child.find_first_child(name)
-        return result if result
-      end
-    end
+    @children.find { |child| child.name == name } if @children
   end
 end

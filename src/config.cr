@@ -28,7 +28,7 @@ struct Config
   end
 
   def base_locale(key)
-    get(key, "base_locale")
+    get(key, "base_locale").as_s
   end
 
   def locales(key)

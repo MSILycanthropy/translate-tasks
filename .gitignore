@@ -5,3 +5,4 @@
 *.dwarf
 translate-tasks
 translate-tasks.yml
+.envrc

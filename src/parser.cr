@@ -11,11 +11,15 @@ module ActionParser
     @parser : OptionParser = OptionParser.new
     @config : Config = Config.new("#{Dir.current}/translate-tasks.yml")
     @gif_printer = GifPrinter.new
+    @translator = Translator.new
     @locales : Array(String) = [] of String
     @command : Symbol = :help
     @gif : Bool = false
+    @yes : Bool = false
     @read_directory : String = ""
     @write_directory : String = ""
+    @yaml_forest = {} of String => Tree
+    @scanned_forest = {} of String => Tree
 
     def initialize
       setup_flags
@@ -56,11 +60,44 @@ module ActionParser
           render_table(missing_translations, "Missing Translations", @config.locales(key))
 
           unless missing_translations.all? { |_, v| v.empty? }
-            print "Would you like to add the above keys (y/n)? "
-            should_add = gets
+            if @yes
+              should_add = "y"
+            else
+              print "Would you like to add the above keys (y/n)? "
+              should_add = gets
+            end
+
             if should_add
               if should_add.chomp == "y"
                 add_missing_translations(key, missing_translations)
+                gracefully_exit(:success)
+              else
+                gracefully_exit(:failure)
+              end
+            else
+              exit
+            end
+          end
+        end
+      when :translate_missing
+        deny_no_config!
+        @config.keys.each do |key|
+          set_context(key)
+          missing_translations = missing_translations(key)
+
+          render_table(missing_translations, "Missing Translations", @config.locales(key))
+
+          unless missing_translations.all? { |_, v| v.empty? }
+            if @yes
+              should_remove = "y"
+            else
+              print "Would you like to translate the above keys (y/n)? "
+              should_translate = gets
+            end
+
+            if should_translate
+              if should_translate.chomp == "y"
+                translate_missing_translations(key, missing_translations, @config.base_locale(key))
                 gracefully_exit(:success)
               else
                 gracefully_exit(:failure)
@@ -79,8 +116,13 @@ module ActionParser
           render_table(unused_translations, "Unused Translations", @config.locales(key))
 
           unless unused_translations.all? { |_, v| v.empty? }
-            print "Would you like to remove the above keys (y/n)? "
-            should_remove = gets
+            if @yes
+              should_remove = "y"
+            else
+              print "Would you like to remove the above keys (y/n)? "
+              should_remove = gets
+            end
+
             if should_remove
               if should_remove.chomp == "y"
                 remove_unused_translations(key, unused_translations)
@@ -113,6 +155,9 @@ module ActionParser
       end
       @parser.on("add-missing", "Add missing translations") do
         @command = :add_missing
+      end
+      @parser.on("translate-missing", "Translate missing translations") do
+        @command = :translate_missing
       end
       @parser.on("unused", "Show unused translations") do
         @command = :unused
@@ -175,6 +220,9 @@ module ActionParser
       end
       @parser.on("-g", "--gif", "Show the cool random gifs every time") do
         @gif = true
+      end
+      @parser.on("-y", "--yes", "Automatically answer yes to prompts") do
+        @yes = true
       end
     end
 

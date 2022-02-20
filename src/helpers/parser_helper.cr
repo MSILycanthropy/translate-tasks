@@ -25,6 +25,9 @@ module ParserHelper
         missing_keys_hash[locale] = scanned.to_a
       else
         yaml_tree = Tree.from_yaml(yaml)
+        @yaml_forest[locale] = yaml_tree
+        # Note: Nothing that uses missing currently uses the scanned_forsest so
+        # we don't add to it here
         scanned_tree = Tree.from_scanned_results(scanned, locale)
 
         missing_keys_hash[locale] = scanned_tree.missing_keys(yaml_tree, locale, @config.write(key).ignore_missing || [] of String)
@@ -36,16 +39,6 @@ module ParserHelper
 
   def unused_translations(key)
     unused_keys_hash = {} of String => Array(String)
-    @read_directory = if @config.read(key).directory == "root"
-                        Dir.current
-                      else
-                        "#{Dir.current}/#{@config.read(key).directory}"
-                      end
-    @write_directory = if @config.write(key).directory == "root"
-                        Dir.current
-                      else
-                        "#{Dir.current}/#{@config.write(key).directory}"
-                      end
     scanned = Scanner.new(@read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
 
     @locales.each do |locale|
@@ -53,10 +46,12 @@ module ParserHelper
       yaml = nil unless yaml.as_h?
 
       if yaml.nil?
-        unused_keys_hash[locale] = scanned.to_a
+        unused_keys_hash[locale] = [] of String
       else
         yaml_tree = Tree.from_yaml(yaml)
+        @yaml_forest[locale] = yaml_tree
         scanned_tree = Tree.from_scanned_results(scanned, locale.as(String))
+        @scanned_forest[locale] = scanned_tree
 
         unused_keys_hash[locale] = scanned_tree.unused_keys(yaml_tree, locale, @config.write(key).ignore_unused || [] of String)
       end
@@ -65,21 +60,18 @@ module ParserHelper
     unused_keys_hash
   end
 
+  # TODO: I didn't realize this when I wrote it, but this just doesn't use the missing_translations hash that it
+  # gets passed and does the work to get the missing keys again, which is a waste of CPU time, since we don't need t o
+  # find the missing keys, just read the YAML and jam in the new keys.
   def add_missing_translations(key, missing_translations)
-    scanned = Scanner.new(@read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
-
     @locales.each do |locale|
-      yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
-      yaml = nil unless yaml.as_h?
-
-      yaml_tree = if yaml.nil?
-                    Tree.new(Node.new(locale, locale))
+      yaml_tree = if @yaml_forest.has_key?(locale)
+                    @yaml_forest[locale]
                   else
-                    Tree.from_yaml(yaml)
+                    Tree.new(Node.new(locale, locale))
                   end
 
-      scanned_tree = Tree.from_scanned_results(scanned, locale)
-      missing_keys = scanned_tree.missing_keys(yaml_tree, locale, @config.write(key).ignore_missing || [] of String)
+      missing_keys = missing_translations[locale]
 
       missing_keys.each do |key|
         yaml_tree.add_child_by_key(key)
@@ -89,20 +81,18 @@ module ParserHelper
     end
   end
 
+  # TODO: I didn't realize this when I wrote it, but this just doesn't use the unused_translations hash that it
+  # gets passed and does the work to get the unused keys again, which is a waste of CPU time, since we don't need t o
+  # find the unused keys, just read the YAML and jam in the new keys.
   def remove_unused_translations(key, unused_translations)
-    scanned = Scanner.new(@read_directory, @config.read(key).file_types, @config.read(key).exclude).scan
-
     @locales.each do |locale|
-      yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
-      yaml = nil unless yaml.as_h?
-
-      yaml_tree = if yaml.nil?
-                    Tree.new(Node.new(locale, locale))
+      yaml_tree = if @yaml_forest.has_key?(locale)
+                    @yaml_forest[locale]
                   else
-                    Tree.from_yaml(yaml)
+                    Tree.new(Node.new(locale, locale))
                   end
 
-      scanned_tree = Tree.from_scanned_results(scanned, locale)
+      scanned_tree = @scanned_forest[locale]
       unused_keys = scanned_tree.unused_keys(yaml_tree, locale, @config.write(key).ignore_unused || [] of String)
 
       unused_keys.each do |key|
@@ -117,14 +107,41 @@ module ParserHelper
     end
   end
 
+  def translate_missing_translations(key, missing_translations, from : String)
+    raise "Could not parse YAML file #{from}.yml, as it is empty!" unless @yaml_forest.has_key?(from)
+
+    from_yaml_tree = @yaml_forest[from]
+    @locales.reject! { |locale| locale == from }.each do |locale|
+      to_yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
+      to_yaml = nil unless to_yaml.as_h?
+      to_yaml_tree = if @yaml_forest.has_key?(locale)
+                       @yaml_forest[locale]
+                     else
+                       Tree.new(Node.new(locale, locale))
+                     end
+
+      missing_keys = missing_translations[locale]
+      things_to_translate = missing_keys.map do |key|
+        value = from_yaml_tree.find_child("#{from}.#{key}").value
+        value.as_s
+      end.compact
+      translated_things = @translator.translate(things_to_translate, from, locale)
+      missing_keys.each_with_index do |key, index|
+        to_yaml_tree.add_child_by_key(key, translated_things[index])
+      end
+
+      YAML.dump(to_yaml_tree.to_h, File.open("#{@write_directory}/#{locale}.yml", "w"))
+    end
+  end
+
   def normalize_translations(key)
     @locales.each do |locale|
-      dir_name = "#{@write_directory}/#{locale}.yml"
-      yaml = YAML.parse(File.read(dir_name))
-      yaml_tree = Tree.from_yaml(yaml)
+      raise "Could not parse YAML file #{locale}.yml, as it is empty!" unless @yaml_forest.has_key?(locale)
+
+      yaml_tree = @yaml_forest[locale]
       normalized_yaml = yaml_tree.to_h
 
-      YAML.dump(normalized_yaml, File.open(dir_name, "w"))
+      YAML.dump(normalized_yaml, File.open("#{@write_directory}/#{locale}.yml", "w"))
     end
   end
 
