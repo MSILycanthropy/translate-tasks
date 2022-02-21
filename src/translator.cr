@@ -3,6 +3,8 @@
 class Translator
   TRANSLATE_API_URL = "https://translation.googleapis.com/language/translate/v2"
 
+  # TODO: Add support for fibers and pooling to make this faster
+  # right now its really slow
   def translate(array : Array(String), from : String, to : String) : Array(String)
     full_translations = [] of String
 
