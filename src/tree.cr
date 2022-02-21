@@ -17,13 +17,13 @@ class Tree
   end
 
   def missing_keys(other : Tree, locale : String, ignored : Array(String)) : Array(String)
-    missing_keys = missing(other).map { |missing| missing.full_name.gsub("#{locale}.", "") }
+    missing_keys = missing(other).map { |missing| missing.full_name.sub("#{locale}.", "") }
 
     (missing_keys - ignored_keys(ignored, missing_keys)).reject! { |key| key.includes?("\#{") }
   end
 
   def unused_keys(other : Tree, locale : String, ignored : Array(String)) : Array(String)
-    unused_keys = unused(other).map { |missing| missing.full_name.gsub("#{locale}.", "") }
+    unused_keys = unused(other).map { |missing| missing.full_name.sub("#{locale}.", "") }
 
     (unused_keys - ignored_keys(ignored, unused_keys)).reject! { |key| key.includes?("\#{") }
   end

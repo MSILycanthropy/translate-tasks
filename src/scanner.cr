@@ -4,7 +4,7 @@ require "./helpers/scanner_helper"
 class Scanner
   include ScannerHelper
 
-  CALL_RE = /(?<=^|[^\w'\-.]|[^\w'\-]I18n\.|I18n\.)t(?:!|ranslate!?)?[( ](:?".+?"|:?'.+?'|:\w+)/x
+  CALL_RE = /(?<=^|[^\w'\-.]|[^\w'\-]I18n\.|I18n\.)t(?:!|ranslate!?)?[( ][\r\n\t ]*(:?".+?"|:?'.+?'|:\w+)/
 
   def initialize(directory : String, file_types : Array(String), exclude_directory : String?)
     @directory = directory
@@ -33,6 +33,7 @@ class Scanner
     if @exclude_directory
       File.join(@directory, "{!(#{@exclude_directory.as(String)}), **}/*{#{@file_types.join(',')}}")
     else
+      puts File.join(@directory, "**/*{#{@file_types.join(',')}}")
       File.join(@directory, "**/*{#{@file_types.join(',')}}")
     end
   end
