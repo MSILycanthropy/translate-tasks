@@ -33,7 +33,6 @@ class Scanner
     if @exclude_directory
       File.join(@directory, "{!(#{@exclude_directory.as(String)}), **}/*{#{@file_types.join(',')}}")
     else
-      puts File.join(@directory, "**/*{#{@file_types.join(',')}}")
       File.join(@directory, "**/*{#{@file_types.join(',')}}")
     end
   end
