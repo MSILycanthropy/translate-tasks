@@ -11,7 +11,3 @@ targets:
 crystal: 1.2.2
 
 license: MIT
-
-dependencies:
-  terminal_table:
-    github: benoist/terminal_table.cr

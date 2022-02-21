@@ -1,4 +1,4 @@
-struct Node
+class Node
   property name, full_name, children, value
 
   def initialize(name : String, full_name : String, children : Array(Node) = [] of Node, value : YAML::Any = YAML::Any.new(""))
@@ -6,6 +6,10 @@ struct Node
     @full_name = full_name
     @children = children
     @value = value
+  end
+
+  def set_value(value : String)
+    @value = YAML::Any.new(value)
   end
 
   def ==(other : Node)
@@ -67,7 +71,6 @@ struct Node
     add_children(_children)
   end
 
-  # TODO: can this just use the child_from_key?
   def children_from_scanned_results(results : Set(String))
     results.group_by { |result| result.split('.').first }.each do |key, values|
       child = Node.new(key, "#{full_name}.#{key}")
@@ -86,7 +89,7 @@ struct Node
   def to_hash : Hash(YAML::Any, YAML::Any)
     hash = {} of YAML::Any => YAML::Any
     @children.each do |child|
-      if (child.value.as_s? != "" || child.value.as_a?) && child.children.empty?
+      if child.value.as_s? != "" || child.value.as_a?
         hash[YAML::Any.new(child.name)] = child.value
       else
         hash[YAML::Any.new(child.name)] = YAML::Any.new(child.to_hash)
@@ -105,59 +108,18 @@ struct Node
     to_hash
   end
 
-  def add_child_by_key(key : String, value : String)
-    node_names = key.split('.')
-    current_node = self
+  def add_children_by_keys(keys : Array(String))
+    return if keys.empty?
 
-    node_names.each_with_index do |node_name, index|
-      if current_node.find_first_child?(node_name)
-        current_node = current_node.find_first_child!(node_name)
+    keys.group_by { |key_string| key_string.split('.').first }.each do |key, values|
+      child = find_child("#{full_name}.#{key}")
+      if child
+        child.add_children_by_keys(values.map { |value| value.split('.')[1..].join('.') }.reject! { |value| value.empty? })
       else
-        remaining_names = node_names[index..]
-        nodes = remaining_names.map do |name|
-          if name == remaining_names.last
-            Node.new(name, "#{current_node.full_name}.#{name}", value: YAML::Any.new(value))
-          else
-            Node.new(name, "#{current_node.full_name}.#{name}")
-          end
-        end
-
-        nodes.reduce do |node, next_node|
-          node.add_child(next_node)
-          next_node
-        end
-
-        current_node.add_child(nodes.first)
-      end
-    end
-  end
-
-  def add_child_by_key(key : String)
-    node_names = key.split('.')
-    current_node = self
-
-    node_names.each_with_index do |node_name, index|
-      if current_node.find_first_child?(node_name)
-        current_node = current_node.find_first_child!(node_name)
-      else
-        remaining_names = node_names[index..]
-
-        nodes = remaining_names.map do |name|
-          if name == remaining_names.last
-            Node.new(name, "#{current_node.full_name}.#{name}",
-                     value: YAML::Any.new(remaining_names.last.gsub("_", " ").capitalize))
-          else
-            Node.new(name, "#{current_node.full_name}.#{name}")
-          end
-        end
-
-        # put all the nodes in the first one
-        nodes.reduce do |node, next_node|
-          node.add_child(next_node)
-          next_node
-        end
-
-        current_node.add_child(nodes.first)
+        child = Node.new(key, "#{full_name}.#{key}")
+        child.add_children_by_keys(values.map { |value| value.split('.')[1..].join('.') }.reject! { |value| value.empty? })
+        child.set_value(key.gsub("_", " ").capitalize) if values.size == 1 && values.first.split('.').size == 1
+        add_child(child)
       end
     end
   end
@@ -225,5 +187,9 @@ struct Node
 
   def find_first_child(name : String)
     @children.find { |child| child.name == name } if @children
+  end
+
+  def to_s(io)
+    io << to_h
   end
 end

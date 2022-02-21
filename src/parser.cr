@@ -89,7 +89,7 @@ module ActionParser
 
           unless missing_translations.all? { |_, v| v.empty? }
             if @yes
-              should_remove = "y"
+              should_translate = "y"
             else
               print "Would you like to translate the above keys (y/n)? "
               should_translate = gets

@@ -1,6 +1,2 @@
 version: 2.0
-shards:
-  terminal_table:
-    git: https://github.com/benoist/terminal_table.cr.git
-    version: 0.1.0+git.commit.a14e244219a6a7b804b3491bafcff73f4b74855e
-
+shards: {}

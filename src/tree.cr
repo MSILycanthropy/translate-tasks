@@ -1,7 +1,7 @@
 # Loose wrapper around node, to help with some root stuff
 # since the actual root of the tree doesn't really
 # do much other than identify the tree as the locale
-struct Tree
+class Tree
   property root
 
   def initialize(root : Node)
@@ -61,12 +61,8 @@ struct Tree
     to_hash
   end
 
-  def add_child_by_key(key : String)
-    @root.add_child_by_key(key)
-  end
-
-  def add_child_by_key(key : String, value : String)
-    @root.add_child_by_key(key, value)
+  def add_children_by_keys(keys : Array(String))
+    @root.add_children_by_keys(keys)
   end
 
   def remove_child_by_key(key : String)
@@ -84,5 +80,9 @@ struct Tree
     root = Node.new(locale, locale)
     root.children_from_scanned_results(results)
     Tree.new(root)
+  end
+
+  def to_s(io)
+    io << to_h
   end
 end
