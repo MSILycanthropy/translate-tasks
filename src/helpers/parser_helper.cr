@@ -110,34 +110,32 @@ module ParserHelper
 
     from_yaml_tree = @yaml_forest[from]
     @locales.reject! { |locale| locale == from }.each do |locale|
-      spawn do
-        to_yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
-        to_yaml = nil unless to_yaml.as_h?
-        to_yaml_tree = if @yaml_forest.has_key?(locale)
-                        @yaml_forest[locale]
-                      else
-                        Tree.new(Node.new(locale, locale))
-                      end
+      to_yaml = YAML.parse(File.read("#{@write_directory}/#{locale}.yml"))
+      to_yaml = nil unless to_yaml.as_h?
+      to_yaml_tree = if @yaml_forest.has_key?(locale)
+                      @yaml_forest[locale]
+                    else
+                      Tree.new(Node.new(locale, locale))
+                    end
 
-        missing_keys = missing_translations[locale]
-        things_to_translate = missing_keys.map do |key|
-          begin
-            value = from_yaml_tree.find_child("#{from}.#{key}").value
-            value.as_s
-          rescue
-            puts "ERROR: Could not find key #{key} in #{from}.yml, which is required for translation.".colorize(:red)
-            exit
-          end
+      missing_keys = missing_translations[locale]
+      things_to_translate = missing_keys.map do |key|
+        begin
+          value = from_yaml_tree.find_child("#{from}.#{key}").value
+          value.as_s
+        rescue
+          puts "ERROR: Could not find key #{key} in #{from}.yml, which is required for translation.".colorize(:red)
+          exit
         end
-        translated_things = @translator.translate(things_to_translate, from, locale)
-        value_hash = missing_keys.zip(translated_things)
-        to_yaml_tree.add_children_by_keys(missing_keys)
-        value_hash.each do |key, value|
-          to_yaml_tree.find_child("#{locale}.#{key}").set_value(value)
-        end
-
-        YAML.dump(to_yaml_tree.to_h, File.open("#{@write_directory}/#{locale}.yml", "w"))
       end
+      translated_things = @translator.translate(things_to_translate, from, locale)
+      value_hash = missing_keys.zip(translated_things)
+      to_yaml_tree.add_children_by_keys(missing_keys)
+      value_hash.each do |key, value|
+        to_yaml_tree.find_child("#{locale}.#{key}").set_value(value)
+      end
+
+      YAML.dump(to_yaml_tree.to_h, File.open("#{@write_directory}/#{locale}.yml", "w"))
     end
   end
 
